@@ -1,9 +1,7 @@
-﻿using MySharp.Logging.Slf4net.Helpers;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Reflection;
-using System.Text;
-using MySharp.Logging.Slf4net.Impl;
+using MySharp.Logging.Slf4net.Helpers;
+using MySharp.Logging.Slf4net.Spi;
 
 namespace MySharp.Logging.Slf4net
 {
@@ -15,24 +13,28 @@ namespace MySharp.Logging.Slf4net
         private const int SuccessfulInitialization = 3;
         private const int NopFallbackInitialization = 4;
 
-        private static int InitializationState = Uninitialized;
-        private static readonly SubstituteLoggerFactory SubstFactory = new SubstituteLoggerFactory();
-        private static readonly NopLoggerFactory NopFallbackFactory = new NopLoggerFactory();
+        private static volatile int _initializationState = Uninitialized;
+        private static readonly SubstituteServiceProvider SubstProvider = new SubstituteServiceProvider();
+        private static readonly NopServiceProvider NopFallbackProvider = new NopServiceProvider();
 
-        private static readonly Version[] ApiCompatibilityList = new Version[] { Version.Parse("1.0"), Version.Parse("1.1"), };
+        private static readonly Version[] ApiCompatibilityList = { Version.Parse("1.0"), Version.Parse("1.1") };
+
+        private static volatile SlfServiceProvider _provider;
+
+        private static readonly object InitLock = new object();
 
         private static void FailedBinding(Exception e)
         {
-            InitializationState = FailedInitialization;
+            _initializationState = FailedInitialization;
             Util.Report("Failed to instantiate LoggerFactory.", e);
         }
 
         private static void FixSubstituteLoggers()
         {
-            lock (SubstFactory)
+            lock (SubstProvider)
             {
-                SubstFactory.PostInitialization();
-                foreach (SubstituteLogger substLogger in SubstFactory.GetLoggers())
+                ((SubstituteLoggerFactory)SubstProvider.LoggerFactory).PostInitialization();
+                foreach (SubstituteLogger substLogger in ((SubstituteLoggerFactory)SubstProvider.LoggerFactory).GetLoggers())
                 {
                     Logger logger = GetLogger(substLogger.Name);
                     substLogger.SetDelegate(logger);
@@ -40,26 +42,23 @@ namespace MySharp.Logging.Slf4net
             }
         }
 
-        static void NoType()
-        {
-            Assembly.GetAssembly(typeof(LoggerFactory)).CreateInstance("");
-        }
-
         static void Bind()
         {
             try
             {
-                StaticLoggerBinder.GetSingleton();
-                InitializationState = SuccessfulInitialization;
-                FixSubstituteLoggers();
-                //ReplayEvents();
-                SubstFactory.Clear();
-            }
-            catch (MissingMethodException noMethod)
-            {
-                string msg = noMethod.Message;
-                InitializationState = FailedInitialization;
-                Util.Report("Incompatible with binding.");
+                List<SlfServiceProvider> providersList = ServiceLoader<SlfServiceProvider>.Load();
+                if (providersList != null && providersList.Count > 1)
+                {
+                    _provider = providersList[0];
+                    _provider.Initialize();
+                    _initializationState = SuccessfulInitialization;
+                    FixSubstituteLoggers();
+                    ((SubstituteLoggerFactory)SubstProvider.LoggerFactory).Clear();
+                }
+                else
+                {
+                    _initializationState = NopFallbackInitialization;
+                }
             }
             catch (Exception e)
             {
@@ -70,12 +69,12 @@ namespace MySharp.Logging.Slf4net
 
         private static void VersionSanityCheck()
         {
-            Version requested = StaticLoggerBinder.RequestApiVersion;
+            Version requested = _provider.RequestedApiVersion;
 
             bool isMatch = false;
             foreach (Version version in ApiCompatibilityList)
             {
-                if (requested > version)
+                if (requested >= version)
                     isMatch = true;
             }
 
@@ -88,37 +87,13 @@ namespace MySharp.Logging.Slf4net
         private static void Initialize()
         {
             Bind();
-            if (InitializationState == SuccessfulInitialization)
+            if (_initializationState == SuccessfulInitialization)
                 VersionSanityCheck();
         }
 
         public static ILoggerFactory GetLoggerFactory()
         {
-            if (InitializationState == Uninitialized)
-            {
-                Type t = typeof(LoggerFactory);
-                lock (t)
-                {
-                    if (InitializationState == Uninitialized)
-                    {
-                        InitializationState = Initializing;
-                        Initialize();
-                    }
-                }
-            }
-
-            switch (InitializationState)
-            {
-                case SuccessfulInitialization:
-                    return StaticLoggerBinder.Singleton.GetLoggerFactory();
-                case NopFallbackInitialization:
-                    return NopFallbackFactory;
-                case FailedInitialization:
-                    throw new OperationCanceledException("LoggerFactory in failed state.");
-                case Initializing:
-                    return SubstFactory;
-            }
-            throw new Exception("Unreachable code.");
+            return GetProvider().LoggerFactory;
         }
 
         public static Logger GetLogger(string name)
@@ -131,6 +106,34 @@ namespace MySharp.Logging.Slf4net
         {
             Logger logger = GetLogger(type.FullName);
             return logger;
+        }
+
+        internal static SlfServiceProvider GetProvider()
+        {
+            if (_initializationState == Uninitialized)
+            {
+                lock (InitLock)
+                {
+                    if (_initializationState == Uninitialized)
+                    {
+                        _initializationState = Initializing;
+                        Initialize();
+                    }
+                }
+            }
+
+            switch (_initializationState)
+            {
+                case SuccessfulInitialization:
+                    return _provider;
+                case NopFallbackInitialization:
+                    return NopFallbackProvider;
+                case FailedInitialization:
+                    throw new OperationCanceledException("LoggerFactory initialize failed.");
+                case Initializing:
+                    return SubstProvider;
+            }
+            throw new Exception("unreachable code");
         }
     }
 }

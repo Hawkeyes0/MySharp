@@ -1,38 +1,31 @@
 ﻿using System;
 using MySharp.Logging.Slf4net.Helpers;
-using MySharp.Logging.Slf4net.Impl;
+using MySharp.Logging.Slf4net.Spi;
 
 namespace MySharp.Logging.Slf4net
 {
     public static class MarkerFactory
     {
-        private static IMarkerFactory _markerFactory;
-
-        private static IMarkerFactory GetMarkerFactoryFromBinder()
-        {
-            return StaticMarkerBinder.Singleton.GetMarkerFactory();
-        }
+        private static readonly IMarkerFactory Factory;
 
         static MarkerFactory()
         {
-            try
+            SlfServiceProvider provider = LoggerFactory.GetProvider();
+            if (provider == null)
             {
-                _markerFactory = GetMarkerFactoryFromBinder();
+                Factory = new BasicMarkerFactory();
             }
-            catch (MissingMethodException)
+            else
             {
-                _markerFactory = new BasicMarkerFactory();
-            }
-            catch (Exception e)
-            {
-                Util.Report("Unexpected failure while binding MarkerFactory");
+                provider.Initialize();
+                Factory = provider.MarkerFactory;
             }
         }
 
-        public static Marker GetMarker(string name) => _markerFactory.GetMarker(name);
+        public static Marker GetMarker(string name) => Factory.GetMarker(name);
 
-        public static Marker GetDetachedMarker(string name) => _markerFactory.GetDetachedMarker(name);
+        public static Marker GetDetachedMarker(string name) => Factory.GetDetachedMarker(name);
 
-        public static IMarkerFactory GetMarkerFactory() => _markerFactory;
+        public static IMarkerFactory GetMarkerFactory() => Factory;
     }
 }
