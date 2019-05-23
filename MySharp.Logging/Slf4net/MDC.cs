@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Text;
 using MySharp.Logging.Slf4net.Helpers;
-using MySharp.Logging.Slf4net.Impl;
 using MySharp.Logging.Slf4net.Spi;
 
 namespace MySharp.Logging.Slf4net
@@ -38,7 +37,7 @@ namespace MySharp.Logging.Slf4net
 
         private static MDCAdapter GetMDCAdapterFromBinder()
         {
-            return StaticMDCBinder.Singleton.GetMDCA();
+            return LoggerFactory.GetProvider().MdcAdapter;
         }
 
         public static void Set(string key, string val)
