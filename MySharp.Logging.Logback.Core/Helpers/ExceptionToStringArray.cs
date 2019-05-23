@@ -13,7 +13,7 @@ namespace MySharp.Logging.Logback.Core.Helpers
             return strList.ToArray();
         }
 
-        private static void Extract(List<string> strList, Exception exception, object o)
+        private static void Extract(List<string> strList, Exception ex, StackFrame[] parentFrames)
         {
             throw new NotImplementedException();
         }
