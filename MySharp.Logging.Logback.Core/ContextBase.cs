@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using MySharp.Logging.Logback.Core.Rolling.Helper;
 using MySharp.Logging.Logback.Core.Spi;
 using MySharp.Logging.Logback.Core.Status;
 

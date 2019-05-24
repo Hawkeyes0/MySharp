@@ -57,7 +57,7 @@ namespace MySharp.Logging.Logback.Core
             }
         }
 
-        public int Count { get; protected set; } = 0;
+        public int Count { get; protected set; }
 
         public int Level => _level;
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using MySharp.Logging.Logback.Core.Spi;
 using MySharp.Logging.Logback.Core.Util;
@@ -16,7 +17,7 @@ namespace MySharp.Logging.Logback.Core.Status
 
         public string Prefix { get; set; }
 
-        protected abstract System.IO.StreamWriter GetWriter();
+        protected abstract TextWriter GetWriter();
 
         private void Print(IStatus status)
         {
